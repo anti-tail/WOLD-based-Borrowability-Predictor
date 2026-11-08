@@ -1,0 +1,5 @@
+wold_index.json
+*.zip
+__pycache__/
+*.pyc
+/out/

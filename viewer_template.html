@@ -1,0 +1,407 @@
+<title>WOLD 借用耐性照合</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@600;700&family=Noto+Sans+JP:wght@400;500;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one working column; header band → summary + scale strip → dense table. Tabs switch list / matching / WOLD lookup. */
+:root{
+  --bg:#f6f7f9; --panel:#ffffff; --ink:#1b2430; --muted:#5d6b7c; --line:#d9dee6; --soft:#eceff4;
+  --accent:#2f5d8a;            /* 藍: controls, focus */
+  --keep:#2e7d5b; --keep-bg:#e3f2ea;   /* 採用 */
+  --drop:#b0452f; --drop-bg:#f8e6e1;   /* 除外 */
+  --none:#8a8f98; --none-bg:#eeeff1;
+  --m-direct:#2f5d8a; --m-near:#6a8fb5; --m-proxy:#c08a2d; --m-none:#9aa1ab;
+  --f-display:"Shippori Mincho","Hiragino Mincho ProN","Yu Mincho",serif;
+  --f-body:"Noto Sans JP","Hiragino Sans","Yu Gothic",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#12161c; --panel:#1a2029; --ink:#e4e9f0; --muted:#97a3b3; --line:#2c3542; --soft:#222a35;
+  --accent:#7fa8d6; --keep:#6cc59a; --keep-bg:#1d3329; --drop:#e58a74; --drop-bg:#3a231e; --none:#8c939d; --none-bg:#262c35;
+  --m-direct:#7fa8d6; --m-near:#a9c3e0; --m-proxy:#e0b25a; --m-none:#7c8490; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#12161c; --panel:#1a2029; --ink:#e4e9f0; --muted:#97a3b3; --line:#2c3542; --soft:#222a35;
+  --accent:#7fa8d6; --keep:#6cc59a; --keep-bg:#1d3329; --drop:#e58a74; --drop-bg:#3a231e; --none:#8c939d; --none-bg:#262c35;
+  --m-direct:#7fa8d6; --m-near:#a9c3e0; --m-proxy:#e0b25a; --m-none:#7c8490; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:14px;line-height:1.6;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:1180px;margin:0 auto;display:flex;flex-direction:column;gap:18px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:12px}
+h1{font-family:var(--f-display);font-weight:700;font-size:1.75rem;margin:0;letter-spacing:.02em;text-wrap:balance}
+.sub{color:var(--muted);font-size:.86rem;margin:2px 0 0}
+nav{display:flex;gap:4px;background:var(--soft);padding:4px;border-radius:8px}
+nav a{padding:6px 14px;border-radius:6px;color:var(--muted);text-decoration:none;font-weight:500;font-size:.9rem}
+nav a[aria-current="page"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+a:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+.controls{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center}
+.ctl{display:flex;flex-wrap:wrap;align-items:center;gap:6px;font-size:.86rem;color:var(--muted);min-width:0;max-width:100%}
+.wrap>*{min-width:0}
+section.wrap{width:100%}
+select,input[type=search]{max-width:100%}
+td:nth-child(3){min-width:7em}
+input[type=number],input[type=search],input[type=text],select,textarea{font:inherit;color:var(--ink);background:var(--panel);border:1px solid var(--line);border-radius:6px;padding:5px 8px}
+input[type=number]{width:5.2em;font-family:var(--f-mono)}
+input[type=search]{width:14em}
+textarea{width:100%;font-family:var(--f-mono);font-size:.82rem}
+button{font:inherit;font-size:.86rem;border:1px solid var(--line);background:var(--panel);color:var(--ink);border-radius:6px;padding:5px 12px;cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--bg);font-weight:500}
+button:hover{border-color:var(--accent)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{display:inline-flex;align-items:center;gap:5px;border:1px solid var(--line);border-radius:999px;padding:2px 10px;font-size:.8rem;cursor:pointer;user-select:none;background:var(--panel)}
+.chip[aria-pressed="false"]{opacity:.45}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.stat{padding:10px 12px;border-radius:8px;background:var(--soft)}
+.stat b{display:block;font-family:var(--f-mono);font-size:1.35rem;font-weight:500}
+.stat span{font-size:.78rem;color:var(--muted)}
+.stat.keep{background:var(--keep-bg)} .stat.keep b{color:var(--keep)}
+.stat.drop{background:var(--drop-bg)} .stat.drop b{color:var(--drop)}
+.strip{overflow-x:auto}
+.strip svg{display:block;width:100%;min-width:560px;height:auto}
+.strip text{fill:var(--muted);font-family:var(--f-mono);font-size:10px}
+.strip .lab{font-family:var(--f-body);font-size:11px}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+table{border-collapse:collapse;width:100%;font-size:.84rem}
+th,td{padding:6px 10px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
+th{position:sticky;top:0;background:var(--soft);font-weight:500;color:var(--muted);font-size:.76rem;letter-spacing:.04em;white-space:nowrap;cursor:pointer}
+tbody tr:hover{background:var(--soft)}
+tr.hl{background:var(--soft);outline:2px solid var(--accent);outline-offset:-2px}
+tr.cut td{border-top:2px dashed var(--drop)}
+.num{font-family:var(--f-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.bar{position:relative;width:110px;height:8px;background:var(--soft);border-radius:4px;margin-top:6px}
+.bar i{position:absolute;left:0;top:0;bottom:0;border-radius:4px}
+.bar u{position:absolute;top:-3px;bottom:-3px;width:1px;background:var(--drop)}
+.pill{display:inline-block;padding:0 8px;border-radius:999px;font-size:.74rem;font-weight:500;white-space:nowrap}
+.p-keep{background:var(--keep-bg);color:var(--keep)} .p-drop{background:var(--drop-bg);color:var(--drop)} .p-none{background:var(--none-bg);color:var(--none)}
+.mt{display:inline-flex;align-items:center;gap:4px;white-space:nowrap;font-size:.78rem}
+.small{font-size:.76rem;color:var(--muted)}
+.jp{font-size:.78rem;color:var(--muted)}
+.loan{color:var(--drop);font-weight:500}
+.cands{display:flex;flex-wrap:wrap;gap:4px;margin-top:4px}
+.cand{font-size:.74rem;border:1px dashed var(--line);border-radius:4px;padding:0 6px;cursor:pointer;background:none;color:var(--ink)}
+.cand:hover{border-style:solid;border-color:var(--accent)}
+.idin{width:12em;font-family:var(--f-mono);font-size:.8rem}
+.row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media (max-width:760px){.row2{grid-template-columns:1fr} input[type=search]{width:100%}}
+.help{color:var(--muted);font-size:.84rem;max-width:72ch}
+.help code{font-family:var(--f-mono);font-size:.8rem;background:var(--soft);padding:0 4px;border-radius:3px}
+.toast{position:fixed;right:max(16px,env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));background:var(--ink);color:var(--bg);padding:8px 14px;border-radius:8px;font-size:.84rem}
+h2{font-family:var(--f-display);font-size:1.15rem;margin:0 0 8px}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+<header>
+  <div>
+    <h1>WOLD 借用耐性照合</h1>
+    <p class="sub" id="dsname">データセット</p>
+  </div>
+  <nav aria-label="表示切替">
+    <a href="#list" data-tab="list">一覧</a>
+    <a href="#match" data-tab="match">対応づけ</a>
+    <a href="#wold" data-tab="wold">WOLD 意味項目</a>
+  </nav>
+</header>
+
+<!-- ===================== 一覧 ===================== -->
+<section id="v-list" class="wrap" style="gap:14px">
+  <div class="panel controls">
+    <label class="ctl" for="thr">除外の閾値（スコアがこれを超えると除外）<input id="thr" type="number" step="0.005" min="0" max="1" value="0.15"></label>
+    <label class="ctl" for="basis">並べ替えの基準
+      <select id="basis"><option value="primary">主対応のスコア</option><option value="max">候補中の最大値（保守的）</option></select></label>
+    <label class="ctl" for="q">絞り込み<input id="q" type="search" placeholder="項目名・WOLD 名・ID"></label>
+    <div class="chips" id="mtchips" aria-label="対応種別"></div>
+  </div>
+  <div class="stats" id="stats"></div>
+  <div class="panel strip"><div class="small" style="margin-bottom:4px">各項目の位置（横軸＝WOLD 借用スコア，点をクリックすると表の行へ移動）</div><div id="strip"></div></div>
+  <div class="tablewrap"><table id="tbl"><thead><tr>
+    <th data-k="order">順</th><th data-k="id">ID</th><th data-k="label">項目</th><th data-k="match">対応</th>
+    <th data-k="mname">WOLD 意味項目</th><th data-k="score">スコア</th><th data-k="rank">順位/1460</th>
+    <th data-k="judge">判定</th><th>WOLD 日本語</th><th>メモ</th><th>注記</th></tr></thead><tbody></tbody></table></div>
+  <p class="small">スコアは WOLD v4.2 の Borrowed_score（41 言語で当該意味の語が借用語である度合いの平均。0＝借用なし，1＝すべて借用）。順位は中核 1460 項目中の借用されにくさの順（1 が最も借用されにくい）。分野平均は中核項目のみで算出。WOLD 日本語欄の <span class="loan">[1]〜[4]</span> は日本語の当該語の借用判定（1＝明らかに借用 … 4＝借用の証拠ごくわずか）。</p>
+</section>
+
+<!-- ===================== 対応づけ ===================== -->
+<section id="v-match" class="wrap" style="gap:14px" hidden>
+  <div class="row2">
+    <div class="panel">
+      <h2>項目リストを読み込む</h2>
+      <p class="help">1 行 1 項目で貼り付けるか，TSV ファイルを選びます。列は <code>id</code>・<code>label</code>（日本語）・任意で <code>gloss</code>（英語訳）。見出し行に <code>wold</code>・<code>match</code> 列があればその対応をそのまま使い，なければ WOLD 日本語語形と英語名から候補を自動で付けます。</p>
+      <label for="paste" class="small">貼り付け（タブ区切り，または「番号 項目名」）</label>
+      <textarea id="paste" rows="7" placeholder="id	label	gloss&#10;1	頭	head&#10;2	すわる	sit&#10;3	まぶしい	dazzling"></textarea>
+      <div class="controls" style="margin-top:8px">
+        <button class="primary" id="btnLoad">候補を付けて読み込む</button>
+        <label class="ctl" for="file">TSV ファイル <input id="file" type="file" accept=".tsv,.txt,.csv"></label>
+        <button id="btnReset">最初の対応表に戻す</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2>対応表を書き出す</h2>
+      <p class="help">修正した対応表（<code>wold</code> 列を含む）と，スコア順の一覧を TSV で取り出せます。同じ対応表はコマンドラインの <code>wold_borrowability.py rank</code> にもそのまま渡せます。</p>
+      <div class="controls"><button id="btnCopyMap">対応表 TSV をコピー</button><button id="btnCopyRank">スコア順一覧 TSV をコピー</button></div>
+      <textarea id="out" rows="7" readonly style="margin-top:8px" aria-label="書き出し内容"></textarea>
+    </div>
+  </div>
+  <div class="panel help">
+    <b>wold 欄の書き方</b>：WOLD の意味項目 ID をセミコロンで並べ，先頭が主対応になります（例 <code>4-2;4-14</code>）。対応する意味がないときは <code>FIELD:The body</code> のように分野平均で代理できます。候補ボタンを押すと主対応に置き換わり，Shift を押しながらだと末尾に追加します。ID は「WOLD 意味項目」タブで探せます。変更はこのブラウザに保存されます。
+  </div>
+  <div class="tablewrap"><table id="mtbl"><thead><tr><th>ID</th><th>項目</th><th>wold（主対応;副対応）</th><th>対応</th><th>スコア</th><th>注記</th></tr></thead><tbody></tbody></table></div>
+</section>
+
+<!-- ===================== WOLD ===================== -->
+<section id="v-wold" class="wrap" style="gap:14px" hidden>
+  <div class="panel controls">
+    <label class="ctl" for="wq">検索<input id="wq" type="search" placeholder="英語名・日本語（漢字/かな）・ID"></label>
+    <label class="ctl" for="wf">意味分野<select id="wf"><option value="">すべて</option></select></label>
+    <label class="ctl" for="wx"><input id="wx" type="checkbox"> 追加項目（標本の少ない x-999xx）も表示</label>
+    <span class="small" id="wcount"></span>
+  </div>
+  <div class="tablewrap"><table id="wtbl"><thead><tr><th>ID</th><th>意味項目</th><th>分野</th><th>スコア</th><th>順位</th><th>WOLD 日本語</th><th></th></tr></thead><tbody></tbody></table></div>
+  <div class="panel"><h2>意味分野ごとの平均</h2><div id="fmeans" class="stats"></div></div>
+</section>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script>
+const W = /*WOLD*/null;
+const FM = /*FIELDMEANS*/null;
+const DEFAULT = /*DATASET*/null;
+const BYID = Object.fromEntries(W.map(m=>[m.id,m]));
+const MT = [["直接","--m-direct"],["近義","--m-near"],["代理","--m-proxy"],["なし","--m-none"]];
+const css = v=>getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const esc = s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const store = {get(k){try{return JSON.parse(localStorage.getItem(k))}catch(e){return null}},set(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}};
+let DS = store.get("wold-ds") || structuredClone(DEFAULT);
+let mtOn = Object.fromEntries(MT.map(m=>[m[0],true]));
+let sortKey = null, sortDir = 1;
+
+function toast(t){const el=document.getElementById("toast");el.textContent=t;el.hidden=false;clearTimeout(toast.t);toast.t=setTimeout(()=>el.hidden=true,1800)}
+function save(){store.set("wold-ds",DS)}
+
+// ---------- resolve / rank ----------
+function resolve(spec){
+  return String(spec||"").split(/[;；]/).map(s=>s.trim()).filter(Boolean).map(t=>{
+    if(/^FIELD:/i.test(t)){const f=t.split(":")[1].trim();return FM[f]==null?{id:t,bad:1,name:"不明な分野 "+f,score:null}:{id:t,name:"["+f+" 分野平均]",field:f,score:FM[f],rank:null,jp:[]}}
+    return BYID[t]||{id:t,bad:1,name:"不明な ID "+t,score:null};
+  });
+}
+function ranked(){
+  const thr = +document.getElementById("thr").value || 0.15;
+  const basis = document.getElementById("basis").value;
+  const rows = DS.rows.map(r=>{
+    const ms = resolve(r.wold).filter(m=>!m.bad);
+    const p = ms[0];
+    const s = p ? (basis==="max" ? Math.max(...ms.map(m=>m.score)) : p.score) : null;
+    return {...r, ms, p, score:s, mname:p?p.name:"", rank:p?p.rank:null,
+      judge: s==null ? "対応なし" : s>thr ? "除外" : "採用"};
+  });
+  rows.sort((a,b)=>(a.score==null)-(b.score==null) || (a.score??9)-(b.score??9) || (+a.id||0)-(+b.id||0));
+  rows.forEach((r,i)=>r.order=i+1);
+  return {rows,thr};
+}
+function jpHtml(m){
+  if(!m||!m.jp||!m.jp.length) return "";
+  return m.jp.slice(0,4).map(f=>esc(f[0]||f[1])+'<span class="small">〈'+esc(f[1])+'〉</span>'+(f[2]&&f[2]!=="5"?'<span class="loan">['+f[2]+']</span>':"")).join("・");
+}
+
+// ---------- 一覧 ----------
+function renderList(){
+  const {rows,thr} = ranked();
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  let vis = rows.filter(r=>mtOn[r.match]??true).filter(r=>!q || [r.id,r.label,r.mname,r.note].join(" ").toLowerCase().includes(q));
+  if(sortKey){vis=[...vis].sort((a,b)=>{const x=a[sortKey],y=b[sortKey];return (x==null)-(y==null)||(typeof x==="number"&&typeof y==="number"?x-y:String(x).localeCompare(String(y),"ja",{numeric:true}))*sortDir})}
+  const n = k=>rows.filter(r=>r.judge===k).length;
+  document.getElementById("stats").innerHTML =
+    `<div class="stat"><b>${rows.length}</b><span>項目</span></div>`+
+    `<div class="stat keep"><b>${n("採用")}</b><span>採用（≤ ${thr.toFixed(3)}）</span></div>`+
+    `<div class="stat drop"><b>${n("除外")}</b><span>除外（&gt; ${thr.toFixed(3)}）</span></div>`+
+    `<div class="stat"><b>${n("対応なし")}</b><span>WOLD に対応なし</span></div>`+
+    MT.map(([k])=>`<div class="stat"><b>${rows.filter(r=>r.match===k).length}</b><span>対応種別：${k}</span></div>`).join("");
+  drawStrip(rows,thr);
+  const max = Math.max(0.6, ...rows.map(r=>r.score||0));
+  const tb = document.querySelector("#tbl tbody");
+  let cutDone=false;
+  tb.innerHTML = vis.map(r=>{
+    const col = css((MT.find(m=>m[0]===r.match)||MT[3])[1]);
+    const pill = r.judge==="採用"?"p-keep":r.judge==="除外"?"p-drop":"p-none";
+    let cls = "";
+    if(!sortKey && !cutDone && r.score!=null && r.score>thr){cls="cut";cutDone=true}
+    const alts = r.ms.slice(1).map(m=>esc(m.name)+" "+m.score.toFixed(3)).join("<br>");
+    return `<tr id="r-${esc(r.id)}" class="${cls}">
+      <td class="num">${r.order}</td><td class="num">${esc(r.id)}</td><td>${esc(r.label)}</td>
+      <td><span class="mt"><span class="dot" style="background:${col}"></span>${esc(r.match)}</span></td>
+      <td>${esc(r.mname)}${r.p&&r.p.field&&!r.p.rank?"":r.p?`<div class="small">${esc(r.p.id)} · ${esc(r.p.field||"")}</div>`:""}${alts?`<div class="small">副：${alts}</div>`:""}</td>
+      <td class="num">${r.score==null?"—":r.score.toFixed(3)}${r.score==null?"":`<div class="bar"><i style="width:${Math.min(100,r.score/max*100)}%;background:${r.score>thr?css("--drop"):css("--keep")}"></i><u style="left:${thr/max*100}%"></u></div>`}</td>
+      <td class="num">${r.rank??"—"}</td>
+      <td><span class="pill ${pill}">${r.judge}</span></td>
+      <td class="jp">${jpHtml(r.p)}</td>
+      <td class="small">${esc([r.memo,r.digitized&&("済 "+r.digitized),r.prior_review&&("レビュー："+r.prior_review)].filter(Boolean).join(" / "))}</td>
+      <td class="small">${esc(r.note)}</td></tr>`}).join("");
+}
+function drawStrip(rows,thr){
+  const Wd=1000, padL=56, padR=16, rowH=26, top=8, H=top+MT.length*rowH+26;
+  const max = Math.ceil(Math.max(0.6,...rows.map(r=>r.score||0))*10)/10;
+  const x = s=>padL+(Wd-padL-padR)*s/max;
+  let g = "";
+  for(let t=0;t<=max+1e-9;t+=0.1){g+=`<line x1="${x(t)}" x2="${x(t)}" y1="${top}" y2="${H-22}" stroke="${css("--line")}" stroke-width="1"/><text x="${x(t)}" y="${H-8}" text-anchor="middle">${t.toFixed(1)}</text>`}
+  g+=`<rect x="${x(thr)}" y="${top}" width="${x(max)-x(thr)}" height="${H-22-top}" fill="${css("--drop-bg")}" opacity=".6"/>`;
+  g+=`<line x1="${x(thr)}" x2="${x(thr)}" y1="${top-4}" y2="${H-22}" stroke="${css("--drop")}" stroke-width="1.5" stroke-dasharray="4 3"/><text x="${x(thr)+4}" y="${top+8}" style="fill:${css("--drop")}">閾値 ${thr.toFixed(3)}</text>`;
+  MT.forEach(([k,v],i)=>{
+    const cy = top+i*rowH+rowH/2+2;
+    g+=`<text class="lab" x="${padL-8}" y="${cy+4}" text-anchor="end">${k}</text>`;
+    const pts = rows.filter(r=>r.match===k&&r.score!=null);
+    const seen = {};
+    pts.forEach(r=>{const key=r.score.toFixed(3);const j=(seen[key]=(seen[key]||0)+1)-1;const dy=((j%5)-2)*3.2;
+      g+=`<circle cx="${x(r.score)}" cy="${cy+dy}" r="3.6" fill="${css(v)}" fill-opacity=".85" stroke="${css("--panel")}" stroke-width=".8" data-id="${esc(r.id)}" style="cursor:pointer"><title>${esc(r.id+" "+r.label+" — "+r.mname+" "+r.score.toFixed(3))}</title></circle>`});
+  });
+  document.getElementById("strip").innerHTML = `<svg viewBox="0 0 ${Wd} ${H}" role="img" aria-label="借用スコアの分布">${g}</svg>`;
+}
+document.getElementById("strip").addEventListener("click",e=>{
+  const id=e.target.getAttribute&&e.target.getAttribute("data-id"); if(!id) return;
+  const tr=document.getElementById("r-"+id); if(!tr){toast("絞り込みで非表示の項目です");return}
+  document.querySelectorAll("tr.hl").forEach(t=>t.classList.remove("hl"));
+  tr.classList.add("hl"); tr.scrollIntoView({block:"center",behavior:"smooth"});
+});
+document.querySelector("#tbl thead").addEventListener("click",e=>{
+  const k=e.target.dataset.k; if(!k) return;
+  if(k==="order"){sortKey=null}else{sortDir = sortKey===k ? -sortDir : 1; sortKey=k}
+  renderList();
+});
+
+// ---------- 候補づけ（wold_borrowability.py の suggest と同じ考え方） ----------
+const KANA = (()=>{const a="あいうえおかきくけこさしすせそたちつてとなにぬねのはひふへほまみむめもやゆよらりるれろわゐゑをんがぎぐげござじずぜぞだぢづでどばびぶべぼぱぴぷぺぽぁぃぅぇぉゃゅょっー";
+ const b="a i u e o ka ki ku ke ko sa shi su se so ta chi tsu te to na ni nu ne no ha hi fu he ho ma mi mu me mo ya yu yo ra ri ru re ro wa i e o n ga gi gu ge go za ji zu ze zo da ji zu de do ba bi bu be bo pa pi pu pe po a i u e o ya yu yo Q -".split(" ");
+ const o={};[...a].forEach((c,i)=>o[c]=b[i]);return o})();
+function kana2romaji(s){
+  s=[...s].map(c=>c>="ァ"&&c<="ヶ"?String.fromCharCode(c.charCodeAt(0)-0x60):c).join("");
+  const out=[];
+  for(const c of s){let r=KANA[c];if(r==null){out.push(c);continue}
+    if("ゃゅょ".includes(c)&&out.length&&/i$/.test(out[out.length-1])&&out[out.length-1].length>1){const base=out.pop().slice(0,-1);r=(["sh","ch","j"].includes(base)?base+r.slice(1):base+r)}
+    out.push(r)}
+  return out.join("").replace(/Q([a-z])/g,"$1$1").replace(/Q/g,"");
+}
+const normR = s=>s.normalize("NFKD").replace(/[\u0300-\u036f]/g,"").toLowerCase().replace(/ou/g,"o").replace(/oo/g,"o").replace(/uu/g,"u").replace(/[^a-z]/g,"");
+function cleanLabel(label){
+  let t=label.replace(/〈[^〉]*〉|\([^)]*\)|（[^）]*）/g," ").replace(/(前部分|後部分|その\d+|一般的な名称|特殊な名称|の詳細図)/g," ");
+  const parts=t.split(/[\s・／/,，、]+/).filter(Boolean).map(p=>[p,1]);
+  (label.match(/〈([^〉]*)〉|（([^）]*)）|\(([^)]*)\)/g)||[]).forEach(g=>g.slice(1,-1).split(/[\s・／/,，、をがにのでは]+/).filter(Boolean).forEach(p=>parts.push([p,parts.length?0.4:1])));
+  return parts;
+}
+function suggest(label,gloss,k=5){
+  const c={};
+  const add=(id,v)=>c[id]=(c[id]||0)+v;
+  for(const [key,wt] of cleanLabel(label||"")){
+    const pureKana=/^[ぁ-ゖァ-ヶー]+$/.test(key), kr=pureKana?normR(kana2romaji(key)):"";
+    const hasK=/[一-龯々]/.test(key), stem=hasK?key.replace(/[ぁ-ゖ]+$/,""):"";
+    for(const m of W){ if(!m.core) continue;
+      for(const f of m.jp){
+        const toks=(f[0]||"").replace(/\(.*?\)|（.*?）/g,"").split(/[,、，/・;；\s]+/).filter(Boolean);
+        if(toks.includes(key)) add(m.id,10*wt);
+        else if(stem&&toks.some(t=>t.replace(/[ぁ-ゖ]+$/,"")===stem)) add(m.id,7*wt);
+        else if(hasK&&key.length>=2&&toks.some(t=>t.includes(key))) add(m.id,3*wt);
+        if(kr&&kr.length>=2&&normR(f[1])===kr) add(m.id,8*wt);
+      }}
+  }
+  for(let g of String(gloss||"").split(/[;,/]/)){ g=g.trim().toLowerCase().replace(/^(the|to) /,""); if(!g) continue;
+    for(const m of W){ if(!m.core) continue;
+      const nm=m.name.toLowerCase().replace(/^(the|to) /,"").replace(/\(\d\)/,"").trim();
+      if(nm===g||nm.split(/ or |\//).map(s=>s.trim()).includes(g)) add(m.id,9);
+      else if(new RegExp("\\b"+g.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b").test(nm)) add(m.id,3);
+    }}
+  return Object.entries(c).sort((a,b)=>b[1]-a[1]||BYID[a[0]].score-BYID[b[0]].score).slice(0,k).map(x=>x[0]);
+}
+
+// ---------- 対応づけ ----------
+function renderMatch(){
+  const tb=document.querySelector("#mtbl tbody");
+  tb.innerHTML = DS.rows.map((r,i)=>{
+    const ms=resolve(r.wold), p=ms[0];
+    const bad=ms.filter(m=>m.bad).map(m=>m.name).join("・");
+    const cands=(r.cands||[]).filter(id=>BYID[id]).map(id=>`<button class="cand" data-i="${i}" data-id="${id}" title="Shift で追加">${esc(BYID[id].name)} ${BYID[id].score.toFixed(3)}</button>`).join("");
+    return `<tr><td class="num">${esc(r.id)}</td><td>${esc(r.label)}${r.gloss?`<div class="small">${esc(r.gloss)}</div>`:""}</td>
+      <td><input class="idin" type="text" id="w-${i}" data-i="${i}" value="${esc(r.wold)}" aria-label="${esc(r.label)} の WOLD ID">
+        <div class="small">${p&&!p.bad?esc(p.name):""}${bad?` <span class="loan">${esc(bad)}</span>`:""}</div>${cands?`<div class="cands">${cands}</div>`:""}</td>
+      <td><select id="m-${i}" data-i="${i}" aria-label="対応種別">${["直接","近義","代理","なし","要確認"].map(k=>`<option${k===r.match?" selected":""}>${k}</option>`).join("")}</select></td>
+      <td class="num">${p&&!p.bad?p.score.toFixed(3):"—"}</td>
+      <td><input type="text" id="n-${i}" data-i="${i}" data-f="note" value="${esc(r.note||"")}" aria-label="注記" style="width:100%;min-width:12em"></td></tr>`}).join("");
+}
+document.querySelector("#mtbl").addEventListener("change",e=>{
+  const i=e.target.dataset.i; if(i==null) return;
+  const r=DS.rows[i];
+  if(e.target.classList.contains("idin")) r.wold=e.target.value.trim();
+  else if(e.target.tagName==="SELECT") r.match=e.target.value;
+  else if(e.target.dataset.f) r[e.target.dataset.f]=e.target.value;
+  save(); renderMatch(); renderList(); refreshOut();
+});
+document.querySelector("#mtbl").addEventListener("click",e=>{
+  const b=e.target.closest(".cand"); if(!b) return;
+  const r=DS.rows[b.dataset.i], id=b.dataset.id;
+  const cur=String(r.wold||"").split(";").map(s=>s.trim()).filter(s=>s&&s!==id);
+  r.wold = e.shiftKey ? [...cur,id].join(";") : [id,...cur].join(";");
+  if(r.match==="要確認") r.match="直接";
+  save(); renderMatch(); renderList(); refreshOut();
+});
+function parseTSV(text){
+  const lines=text.replace(/\r/g,"").split("\n").filter(l=>l.trim());
+  if(!lines.length) return [];
+  let head=lines[0].split("\t").map(s=>s.trim().replace(/^\ufeff/,""));
+  const hasHead=head.includes("label")||head.includes("id")||head.includes("項目");
+  if(!hasHead) head=null;
+  return (hasHead?lines.slice(1):lines).map((l,n)=>{
+    let cols=l.split("\t");
+    if(!head){ if(cols.length===1){const m=l.trim().match(/^(\S+)\s+(.+)$/); cols=m&&/\d/.test(m[1])?[m[1],m[2]]:[String(n+1),l.trim()]}
+      return {id:cols[0].trim(),label:(cols[1]||"").trim(),gloss:(cols[2]||"").trim()} }
+    const o={}; head.forEach((h,j)=>o[h]=(cols[j]||"").trim());
+    o.label=o.label||o["項目"]||""; o.id=o.id||o["map"]||String(n+1); return o;
+  });
+}
+function loadRows(rows,name){
+  rows.forEach(r=>{
+    r.cands=suggest(r.label,r.gloss||"");
+    if(!r.wold){r.wold=r.cands[0]||""; r.match=r.cands.length?"要確認":"なし"}
+    r.match=r.match||"要確認"; r.note=r.note||"";
+  });
+  DS={name,rows}; save(); renderAll(); toast(rows.length+" 項目を読み込みました");
+}
+document.getElementById("btnLoad").onclick=()=>{const rows=parseTSV(document.getElementById("paste").value); if(!rows.length){toast("貼り付け欄が空です");return} loadRows(rows,"貼り付けた項目リスト")};
+document.getElementById("file").onchange=e=>{const f=e.target.files[0]; if(!f) return; const rd=new FileReader(); rd.onload=()=>loadRows(parseTSV(rd.result),f.name); rd.readAsText(f,"utf-8")};
+document.getElementById("btnReset").onclick=()=>{DS=structuredClone(DEFAULT); DS.rows.forEach(r=>r.cands=suggest(r.label,"")); save(); renderAll(); toast("最初の対応表に戻しました")};
+
+function toTSV(rows,cols){return [cols.join("\t"),...rows.map(r=>cols.map(c=>String(r[c]??"").replace(/[\t\n]/g," ")).join("\t"))].join("\n")}
+function mapTSV(){const extra=[...new Set(DS.rows.flatMap(r=>Object.keys(r)))].filter(k=>!["id","label","gloss","wold","match","note","cands"].includes(k));return toTSV(DS.rows,["id","label","gloss","wold","match","note",...extra])}
+function rankTSV(){const {rows}=ranked();return toTSV(rows.map(r=>({...r,score:r.score==null?"":r.score.toFixed(3),primary_id:r.p?r.p.id:"",field:r.p?r.p.field||"":"",candidates:r.ms.map(m=>m.name+" "+m.score.toFixed(3)).join(" | ")})),["order","id","label","match","primary_id","mname","field","score","rank","judge","candidates","note"])}
+function refreshOut(){document.getElementById("out").value=mapTSV()}
+async function copy(text,label){const ta=document.getElementById("out");ta.value=text;
+  try{await navigator.clipboard.writeText(text);toast(label+"をコピーしました")}catch(e){ta.focus();ta.select();toast("下の欄を選択しました。Ctrl+C でコピーしてください")}}
+document.getElementById("btnCopyMap").onclick=()=>copy(mapTSV(),"対応表 ");
+document.getElementById("btnCopyRank").onclick=()=>copy(rankTSV(),"スコア順一覧 ");
+
+// ---------- WOLD ----------
+const fsel=document.getElementById("wf");
+Object.keys(FM).sort().forEach(f=>fsel.insertAdjacentHTML("beforeend",`<option>${esc(f)}</option>`));
+function renderWold(){
+  const q=document.getElementById("wq").value.trim().toLowerCase(), f=fsel.value, x=document.getElementById("wx").checked;
+  let list=W.filter(m=>(x||m.core)&&(!f||m.field===f));
+  if(q){const s=new Set(suggest(q,q,40)); list=list.filter(m=>s.has(m.id)||m.id===q||m.name.toLowerCase().includes(q)||m.jp.some(j=>(j[0]+" "+j[1]).toLowerCase().includes(q)))}
+  list.sort((a,b)=>a.score-b.score);
+  document.getElementById("wcount").textContent=list.length+" 項目";
+  document.querySelector("#wtbl tbody").innerHTML=list.slice(0,600).map(m=>`<tr><td class="num">${m.id}</td><td>${esc(m.name)}${m.core?"":' <span class="small">追加項目</span>'}</td><td class="small">${esc(m.field)}</td><td class="num">${m.score.toFixed(3)}</td><td class="num">${m.rank??"—"}</td><td class="jp">${jpHtml(m)}</td><td><button class="cand" data-copy="${m.id}">ID をコピー</button></td></tr>`).join("");
+  document.getElementById("fmeans").innerHTML=Object.entries(FM).sort((a,b)=>a[1]-b[1]).map(([k,v])=>`<div class="stat${v>0.15?"":" keep"}"><b>${v.toFixed(3)}</b><span>${esc(k)}<br><code class="small">FIELD:${esc(k)}</code></span></div>`).join("");
+}
+document.getElementById("wtbl").addEventListener("click",e=>{const id=e.target.dataset.copy;if(id) copy(id,"ID "+id+" ")});
+["wq","wf","wx"].forEach(id=>document.getElementById(id).addEventListener("input",renderWold));
+["thr","basis","q"].forEach(id=>document.getElementById(id).addEventListener("input",renderList));
+
+// ---------- chips / tabs ----------
+document.getElementById("mtchips").innerHTML=MT.map(([k,v])=>`<span class="chip" role="button" tabindex="0" aria-pressed="true" data-mt="${k}"><span class="dot" style="background:var(${v})"></span>${k}</span>`).join("");
+document.getElementById("mtchips").addEventListener("click",e=>{const c=e.target.closest(".chip");if(!c)return;mtOn[c.dataset.mt]=!mtOn[c.dataset.mt];c.setAttribute("aria-pressed",mtOn[c.dataset.mt]);renderList()});
+function route(){const t=(location.hash||"#list").slice(1);["list","match","wold"].forEach(v=>{document.getElementById("v-"+v).hidden=v!==(["list","match","wold"].includes(t)?t:"list")});
+  document.querySelectorAll("nav a").forEach(a=>a.setAttribute("aria-current",a.dataset.tab===t||(!["match","wold"].includes(t)&&a.dataset.tab==="list")?"page":"false"))}
+window.addEventListener("hashchange",route);
+function renderAll(){document.getElementById("dsname").textContent=DS.name+"・"+DS.rows.length+" 項目 ／ WOLD v4.2 Borrowed_score";renderList();renderMatch();renderWold();refreshOut()}
+DS.rows.forEach(r=>{if(!r.cands) r.cands=suggest(r.label,r.gloss||"")});
+route(); renderAll();
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change",renderList);
+</script>
